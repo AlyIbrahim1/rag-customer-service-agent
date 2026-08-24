@@ -76,21 +76,21 @@ def generate(state: State) -> State:
         )
         return state
 
-        context = "\n\n".join(
+    context = "\n\n".join(
         f"[{r['source']} p.{r['page']}]\n{r['text']}" for r in state["retrieved"]
-        )
-        prompt = (
-            "Answer the question using ONLY the context below. "
-            "If the context doesn't contain the answer, say so — do not make anything up.\n\n"
-            f"Context:\n{context}\n\nQuestion: {state['cleaned_question']}"
-        )
+    )
+    prompt = (
+        "Answer the question using ONLY the context below. "
+        "If the context doesn't contain the answer, say so — do not make anything up.\n\n"
+        f"Context:\n{context}\n\nQuestion: {state['cleaned_question']}"
+    )
 
-        response = llm.chat.completions.create(
-            model=CHAT_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        state["answer"] = response.choices[0].message.content
-        return state
+    response = llm.chat.completions.create(
+        model=CHAT_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    state["answer"] = response.choices[0].message.content
+    return state
 
 def respond(state: State) -> State:
     if state["low_confidence"]:
