@@ -7,6 +7,7 @@ Agentic RAG chatbot over Etisalat Egypt's product/service knowledge base. Built 
 - The work in this project is meant to be a learning experience so always explain the code and the steps as if you are working with a total beginner.
 - Never implement the code directly yourself, unless specifically instructed.
 - Use the simplest implementation possible that is suitable for a beginner.
+- Always follow the requirements stated in @project-instructions .
 
 ## Stack
 
