@@ -1,3 +1,5 @@
 .venv/
 .env
 chroma_db/
+plan.md
+__pycache__/
