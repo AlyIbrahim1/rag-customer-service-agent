@@ -1,39 +1,42 @@
 # AGENTS.md
 
-Agentic RAG chatbot over Etisalat Egypt's product/service knowledge base. Built as part of the Etisalat Egypt Internship Program 2026 — see `project-instructions.md` for the full project brief.
+Beginner-focused e& Egypt RAG assistant with a Python backend and React frontend.
 
-## Working context
+## Rules
 
-- The work in this project is meant to be a learning experience so always explain the code and the steps as if you are working with a total beginner.
-- Never implement the code directly yourself, unless specifically instructed.
-- Use the simplest implementation possible that is suitable for a beginner.
-- Always follow the requirements stated in @project-instructions .
+- Explain code and steps for a total beginner.
+- Do not implement unless the user explicitly asks for a change.
+- Prefer the smallest understandable solution; reuse existing code and native features before adding dependencies or abstractions.
+- Preserve unrelated working-tree changes.
+- Never expose or commit secrets, `.env`, `.venv`, `chroma_db/`, `frontend/node_modules/`, or `frontend/dist/`.
+- Add one minimal runnable check for non-trivial logic; do not introduce a test framework unless requested.
 
-## Stack
+## Backend structure
 
-- Python 3.10+, `.venv` for isolation
-- LangGraph — state-machine agent workflow
-- ChromaDB — local vector store
-- OpenAI-compatible API — embeddings + generation (OpenRouter)
-- Streamlit — chat UI
+- `backend/` is the canonical Python package for runtime code.
+- Put all backend logic and runnable checks in `backend/`, and use relative
+  imports within that package so API, MCP, ingestion, and the legacy graph share
+  one implementation.
 
-## Layout
+## Product constraints
 
-- `ingest.py` — loads documents from `knowledge-base/`, chunks, embeds, and writes them into ChromaDB
-- `graph.py` — LangGraph state machine (nodes: understand → retrieve → generate → respond)
-- `app.py` — Streamlit entrypoint, wires the UI to `graph.py`
-- `knowledge-base/` — source PDFs (plans, internet services, prepaid systems, etc.)
-- `.env` — API keys / config (gitignored, never commit)
+- Ground e& product claims in retrieved knowledge-base content and show readable, one-based source citations.
+- Handle missing, empty, or low-confidence retrieval explicitly; never let the model fill knowledge gaps.
+- Validate trust boundaries and never expose distances, filesystem paths, stack traces, keys, or internal prompts.
+- Customer-facing copy is English-only for actual e& Egypt customers; tone is warm, reassuring, and competent.
+- Never imply access to customer accounts or ask for passwords or verification codes.
 
-`app.py`, `graph.py`, and `ingest.py` are currently empty stubs — this is a greenfield scaffold.
+## Read only when relevant
 
-## Architecture
+- `ARCHITECTURE.md` — read only for code changes, debugging, setup, integration, API contracts, data flow, or repository structure.
+- `frontend-design-plan.md` and `.impeccable.md` — read fully before frontend design or implementation; follow the planned ChatGPT-inspired e& design and AMOTP structure.
+- `project-instructions.md` — read only when work concerns the original internship scope, deliverables, or evaluation criteria.
 
-Query → understand (intent/keywords) → retrieve (Chroma similarity search) → generate (LLM grounded on retrieved context) → respond (answer + source citations). Each step is a LangGraph node; keep routing/edge logic explicit so the flow stays inspectable.
+The current React + Starlette implementation overrides the original brief's suggested Streamlit scaffold. Planned behavior must not be described as already implemented.
 
-## Conventions
+## Checks
 
-- Keep responses grounded in retrieved context; always surface source citations.
-- Handle the no-results / low-confidence-retrieval case explicitly rather than letting the LLM hallucinate an answer.
-- Don't commit `.env` or `.venv` (already gitignored).
-- No test framework set up yet — if you add non-trivial logic (retrieval scoring, routing), leave a minimal runnable check alongside it.
+- Backend: `.venv/bin/python -m py_compile backend/*.py backend/checks/*.py`
+- Retrieval after indexing: `.venv/bin/python -m backend.checks.check_retrieval`
+- MCP boundary after indexing: `.venv/bin/python -m backend.checks.check_mcp`
+- Frontend: run `npm run build` from `frontend/`.

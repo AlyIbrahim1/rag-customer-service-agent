@@ -1,16 +1,179 @@
 ## e& Egypt RAG Assistant
 
-The chat interface is now a React application. The Python service exposes the
-existing LangGraph workflow through a small HTTP API.
+This project has two local ways to use the e& Egypt product knowledge base:
 
-### Run locally
+- the existing React chat interface, which uses the Python HTTP API; and
+- an MCP server, which lets an MCP-capable AI agent search the same indexed PDF
+  knowledge base.
+
+All backend implementation lives in the `backend/` Python package. Use the
+package entrypoints shown below for imports, development, and deployment.
+
+### Run the existing web chat locally
 
 1. Create and activate the Python virtual environment, then install the backend
    packages with `pip install -r requirements.txt`.
-2. Index the knowledge base with `python ingest.py` if `chroma_db/` does not
+   The web chat also needs `GOOGLE_API_KEY` and `CHAT_MODEL` in `.env` for its
+   Gemini-compatible LangGraph replies. The MCP search tool does not use them.
+2. Index the knowledge base with `python -m backend.ingest` if `chroma_db/` does not
    already exist.
-3. Start the API with `uvicorn api:app --reload`.
+3. Start the API with `uvicorn backend.api:app --reload`.
 4. In a second terminal, run `cd frontend`, `npm install`, then `npm run dev`.
 
 The Vite development server proxies `/api` requests to the Python API. Open the
 URL it prints (normally `http://localhost:5173`) to use the assistant.
+
+## Use the knowledge base from an MCP-capable agent
+
+MCP (Model Context Protocol) lets an AI agent call local tools. In this project,
+the tool only searches the indexed e& Egypt PDF guides; the calling agent writes
+the customer-facing reply.
+
+### 1. Prepare the local knowledge base
+
+From the repository root, create and activate a virtual environment if needed,
+install the requirements, then build the local search index:
+
+```bash
+pip install -r requirements.txt
+python -m backend.ingest
+```
+
+Run `python -m backend.ingest` again whenever the PDFs in `knowledge-base/` change. The
+MCP search uses local embeddings and does not need an LLM API key.
+
+### 2. Add the server to your agent
+
+Use your MCP-capable agent's server settings to launch the `backend.mcp_server`
+module from the repository root. The generic Windows-shaped example is in
+[`mcp-client.example.json`](mcp-client.example.json). Replace the placeholder
+repository path with this project's absolute path:
+
+```json
+{
+  "mcpServers": {
+    "etisalat-knowledge-base": {
+      "command": "C:\\path\\to\\etisalat-rag-bot\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "backend.mcp_server"],
+      "cwd": "C:\\path\\to\\etisalat-rag-bot"
+    }
+  }
+}
+```
+
+On macOS or Linux, use the virtual environment interpreter at
+`/absolute/path/to/etisalat-rag-bot/.venv/bin/python` instead. Keep
+`-m backend.mcp_server` as the arguments and set the working directory (`cwd`)
+to the repository root. Your agent may use different setting names, but it
+needs these same three values: Python command, backend module arguments, and
+repository-root working directory.
+
+Do not run the server in a normal terminal for interactive use: it communicates
+with the agent over standard input/output (stdio). That also means a browser or
+the React frontend cannot connect to it directly. Keep using
+`uvicorn backend.api:app --reload` and the web-chat steps above until a separate
+server-side, agent-hosted HTTP backend is deliberately added.
+
+### 3. Give the agent these tool instructions
+
+Add the following to the calling agent's tool instructions or system prompt:
+
+```text
+Use search_etisalat_knowledge_base for factual questions about e& Egypt
+products and services. Do not call it for greetings, thanks, or ordinary
+conversation. Before a search, rewrite a follow-up such as "What are its
+benefits?" into a standalone product question using the conversation context.
+
+Treat outcome "grounded" as the only evidence for factual claims: answer from
+the returned chunks and include each relevant source title and page as a
+citation. Treat outcome "no_match" as a lack of supporting documentation; say
+the available product guides do not support an answer and do not guess or cite
+weak matches. For an outcome "error", explain that the local knowledge base is
+unavailable and follow the tool message.
+```
+
+### Quick MCP checks
+
+After indexing, run the protocol-level check from the repository root:
+
+```bash
+python -m backend.checks.check_mcp
+```
+
+It starts the stdio server from a different working directory, verifies that it
+advertises only the expected tool, and checks grounded, no-match, and blank-input
+responses. Then configure the agent and try these four conversations:
+
+1. A known product question, such as `What does the DataLine plan include?`.
+   The agent should call the tool, give a grounded answer, and cite title/page
+   evidence.
+2. Ask `What are its benefits?` after discussing that product. The agent should
+   rewrite the follow-up before searching, then cite the returned evidence.
+3. Say `Hello` or `Thanks`. The agent should respond normally without using the
+   knowledge-base tool.
+4. Ask an unrelated question. The agent should report that the available guides
+   do not support an answer rather than inventing one.
+
+### Rollout and rollback
+
+The selected initial architecture is **both clients**: the MCP server serves
+agent clients while the existing React → `backend.api` → LangGraph path remains
+the supported web-chat and rollback route. If MCP integration fails, disable the
+agent's MCP server entry; do not remove or redirect the HTTP path.
+
+## Evaluate quality and red-team security
+
+These tools are offline developer checks. They do not change what customers see.
+
+### Ragas quality evaluation
+
+Ragas scores the answer against the exact chunks retrieved by the graph. The included
+[`backend/evaluation/dataset.jsonl`](backend/evaluation/dataset.jsonl) contains five
+reference cases verified against the supplied product PDFs. Each line also records the
+source page used to approve the reference answer. Review or add cases when the knowledge
+base changes; do not use unverified product claims as reference answers.
+
+```bash
+python -m venv .venv-ragas
+# Windows: .venv-ragas\Scripts\Activate.ps1
+# macOS/Linux: source .venv-ragas/bin/activate
+pip install -r requirements-ragas.txt
+python -m backend.ingest
+python -m backend.evaluation.ragas_eval backend/evaluation/dataset.jsonl
+```
+
+The command prints mean faithfulness, context precision, and context recall, and
+saves row-level scores under `backend/evaluation/results/` (which is ignored by
+Git). A no-match response is reported but intentionally not scored: an answer
+without grounded context must not be treated as quality evidence.
+
+### Garak security red team
+
+Start the local API using the Ragas environment in one terminal. In another terminal,
+create and activate a separate Garak environment, then run this limited first scan:
+
+```bash
+# Terminal 1
+uvicorn backend.api:app
+
+# Terminal 2
+python -m venv .venv-garak
+# Windows: .venv-garak\Scripts\Activate.ps1
+# macOS/Linux: source .venv-garak/bin/activate
+pip install -r requirements-garak.txt
+
+python -m garak --target_type rest -G backend/evaluation/garak_chat_api.json \
+  --probes promptinject,encoding --generations 1 \
+  --report_prefix backend/evaluation/results/garak
+```
+
+The REST configuration submits garak's probes as ordinary `/api/chat` questions
+and reads only the public `answer` response. Review every garak hit manually:
+a detector failure is a finding to investigate, not proof that the model exposed
+a secret. Only scan systems you own or are authorised to test.
+
+Run the lightweight validation without calling an LLM:
+
+```bash
+python -m backend.checks.check_evaluation
+```
