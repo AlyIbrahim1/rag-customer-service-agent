@@ -1,44 +1,15 @@
-"""
-LangGraph state machine:
-    understand -> retrieve -> generate        -> respond   (product questions)
-    understand -> generate_direct              -> respond  (greetings, small talk,
-                                                            "summarize our chat", etc.)
+"""LangGraph workflow for the legacy HTTP chat client."""
 
-understand:         classifies the message as needing a KB search or not, and (if
-                    needed) rewrites it into a standalone question using history.
-retrieve:           embeds the question and pulls the closest chunks from Chroma.
-generate:           asks the LLM to answer using ONLY the retrieved chunks.
-generate_direct:    asks the LLM to answer from conversation history / general
-                    knowledge, skipping the vector search entirely.
-respond:            formats the final answer with source citations.
-"""
-
-import os
 from typing import TypedDict
 
-import chromadb
-from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
-
-from dotenv import load_dotenv
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 from openai import OpenAI
 
-load_dotenv()
+from .config import CHAT_MODEL, GENERATION_BASE_URL, GOOGLE_API_KEY
+from .mcp_client import search_knowledge_base_via_mcp
 
-CHROMA_DIR = "chroma_db"
-COLLECTION_NAME = "etisalat_kb"
-N_RESULTS = 5
-DISTANCE_THRESHOLD = 1.3
 
-client = chromadb.PersistentClient(path=CHROMA_DIR)
-embedding_fn = SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
-collection = client.get_collection(name=COLLECTION_NAME, embedding_function=embedding_fn)
-
-llm = OpenAI(
-    api_key=os.getenv("GOOGLE_API_KEY"),
-    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-)
-CHAT_MODEL = os.getenv("CHAT_MODEL")
+llm = OpenAI(api_key=GOOGLE_API_KEY, base_url=GENERATION_BASE_URL)
 
 SYSTEM_PROMPT = (
     "You are the e& Egypt Assistant, a friendly and professional customer support "
@@ -51,26 +22,25 @@ SYSTEM_PROMPT = (
     "helpful, professional support tone."
 )
 
+
 class State(TypedDict):
     question: str
-    history: list[dict]        # prior turns: [{"role": "user"|"assistant", "content": str}]
+    history: list[dict]
     cleaned_question: str
     needs_retrieval: bool
-    retrieved: list[dict]       # [{"text": str, "source": str, "page": int, "distance": float}]
+    retrieved: list[dict]
     low_confidence: bool
     answer: str
-    sources: list[str]
+    outcome: str
+    sources: list[dict]  # [{"title": str, "page": int}]
+
 
 def understand(state: State) -> State:
+    """Route the message and rewrite follow-ups into standalone questions."""
+
     question = state["question"].strip()
     history = state.get("history", [])
     history_text = "\n".join(f"{m['role']}: {m['content']}" for m in history) or "(none)"
-
-    # One LLM call does two jobs: 
-    # (1) decide if this needs a KB search at all
-    # (greetings/small talk/"summarize our chat" don't), 
-    # and (2) if it does, rewrite follow-ups like "what are it's benefits?" into a standalone
-    # question so `retrieve` searches for the right product.
     route_prompt = (
         "You are the router for the e& Egypt support chatbot. Decide whether the "
         "LATEST user message needs a search of the product knowledge base "
@@ -101,40 +71,39 @@ def understand(state: State) -> State:
     state["cleaned_question"] = cleaned_question or question
     return state
 
-def retrieve(state: State) -> State:
-    results = collection.query(query_texts=[state["cleaned_question"]], n_results=N_RESULTS)
 
-    retrieved = []
-    documents = results["documents"][0]
-    metadatas = results["metadatas"][0]
-    distances = results["distances"][0]
-    for text, meta, distance in zip(documents, metadatas, distances):
-        retrieved.append({
-            "text": text,
-            "source": meta["source"],
-            "page": meta["page"],
-            "distance": distance,
-        })
-    
-    state["retrieved"] = retrieved
-    state["low_confidence"] = (not retrieved) or (retrieved[0]["distance"] > DISTANCE_THRESHOLD)
+def retrieve(state: State) -> State:
+    """Ask the MCP knowledge tool for normalized retrieval results."""
+
+    result = search_knowledge_base_via_mcp(state["cleaned_question"])
+    state["retrieved"] = [
+        {
+            "text": item["text"],
+            "source": item["source"]["title"],
+            "page": item["source"]["page"],
+        }
+        for item in result["results"]
+    ]
+    state["low_confidence"] = result["outcome"] != "grounded"
     return state
 
 
 def generate(state: State) -> State:
+    """Generate only from retrieved context, or give the safe no-match reply."""
+
     if state["low_confidence"]:
         state["answer"] = (
-            "I don't have information about that in the Etisalat knowledge base. "
+            "I don't have reliable information about that in the available e& product guides. "
             "Try rephrasing, or ask about DataLine, Emerald, Hekaya Internet, "
             "Hekaya Mixat, or prepaid systems."
         )
         return state
 
     context = "\n\n".join(
-        f"[{r['source']} p.{r['page']}]\n{r['text']}" for r in state["retrieved"]
+        f"[{item['source']} p.{item['page']}]\n{item['text']}"
+        for item in state["retrieved"]
     )
     prompt = f"Context:\n{context}\n\nQuestion: {state['cleaned_question']}"
-
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     messages.extend(state.get("history", []))
     messages.append({"role": "user", "content": prompt})
@@ -143,27 +112,36 @@ def generate(state: State) -> State:
     state["answer"] = response.choices[0].message.content
     return state
 
+
 def generate_direct(state: State) -> State:
+    """Answer greetings/history requests without pretending they used the KB."""
+
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     messages.extend(state.get("history", []))
     messages.append({"role": "user", "content": state["cleaned_question"]})
-
     response = llm.chat.completions.create(model=CHAT_MODEL, messages=messages)
     state["answer"] = response.choices[0].message.content
     state["retrieved"] = []
     state["low_confidence"] = False
     return state
 
+
 def respond(state: State) -> State:
+    """Set the response outcome and safe, structured sources."""
+
     if state["low_confidence"]:
+        state["outcome"] = "no_match"
+        state["sources"] = []
+    elif not state["needs_retrieval"]:
+        state["outcome"] = "direct"
         state["sources"] = []
     else:
+        state["outcome"] = "grounded"
         seen = []
-        for r in state["retrieved"]:
-            label = f"{r['source']} (p.{r['page']})"
-            if label not in seen:
-                seen.append(label)
-        
+        for item in state["retrieved"]:
+            source = {"title": item["source"], "page": item["page"]}
+            if source not in seen:
+                seen.append(source)
         state["sources"] = seen
     return state
 
@@ -174,7 +152,6 @@ workflow.add_node("retrieve", retrieve)
 workflow.add_node("generate", generate)
 workflow.add_node("generate_direct", generate_direct)
 workflow.add_node("respond", respond)
-
 workflow.set_entry_point("understand")
 workflow.add_conditional_edges(
     "understand",
@@ -189,12 +166,30 @@ workflow.add_edge("respond", END)
 graph = workflow.compile()
 
 
-def answer_question(question: str, history: list[dict] | None = None) -> dict:
+def answer_question(
+    question: str, history: list[dict] | None = None, include_trace: bool = False
+) -> dict:
+    """Run the chat workflow, optionally including evaluation-only retrieval data."""
+
     final_state = graph.invoke({"question": question, "history": history or []})
-    return {"answer": final_state["answer"], "sources": final_state["sources"]}
+    result = {
+        "answer": final_state["answer"],
+        "outcome": final_state["outcome"],
+        "sources": final_state["sources"],
+    }
+    if include_trace:
+        result["retrieval_question"] = final_state["cleaned_question"]
+        result["retrieved_contexts"] = [
+            item["text"] for item in final_state.get("retrieved", [])
+        ]
+    return result
 
 
-if __name__ == "__main__":
+def main() -> None:
     result = answer_question("What is DataLine?")
     print(result["answer"])
     print("Sources:", result["sources"])
+
+
+if __name__ == "__main__":
+    main()
