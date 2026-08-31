@@ -1,0 +1,16 @@
+## e& Egypt RAG Assistant
+
+The chat interface is now a React application. The Python service exposes the
+existing LangGraph workflow through a small HTTP API.
+
+### Run locally
+
+1. Create and activate the Python virtual environment, then install the backend
+   packages with `pip install -r requirements.txt`.
+2. Index the knowledge base with `python ingest.py` if `chroma_db/` does not
+   already exist.
+3. Start the API with `uvicorn api:app --reload`.
+4. In a second terminal, run `cd frontend`, `npm install`, then `npm run dev`.
+
+The Vite development server proxies `/api` requests to the Python API. Open the
+URL it prints (normally `http://localhost:5173`) to use the assistant.

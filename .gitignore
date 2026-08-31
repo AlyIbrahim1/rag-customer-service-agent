@@ -3,3 +3,8 @@
 chroma_db/
 plan.md
 __pycache__/
+
+.playwright-cli/
+frontend/node_modules/
+frontend/dist/
+graphify-out/
