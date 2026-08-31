@@ -1,0 +1,14 @@
+{
+  "rest": {
+    "RestGenerator": {
+      "name": "e& Egypt chat API",
+      "uri": "http://127.0.0.1:8000/api/chat",
+      "method": "post",
+      "headers": {"Content-Type": "application/json"},
+      "req_template_json_object": {"question": "$INPUT", "history": []},
+      "response_json": true,
+      "response_json_field": "answer",
+      "request_timeout": 60
+    }
+  }
+}
