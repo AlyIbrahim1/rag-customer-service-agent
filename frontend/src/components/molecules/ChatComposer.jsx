@@ -1,32 +1,33 @@
 import { useLayoutEffect, useRef } from "react";
-import IconButton from "../atoms/IconButton";
+import Icon from "../atoms/Icon";
 
-export default function ChatComposer({ value, isLoading, onChange, onSend }) {
-  const textareaRef = useRef(null);
+// Chat input: Enter sends, Shift+Enter adds a line, grows up to 110px.
+export default function ChatComposer({ value, isLoading, placeholder, messageLabel, sendLabel, inputRef, onChange, onSend }) {
+  const ownRef = useRef(null);
+  const textareaRef = inputRef || ownRef;
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
-    if (!textarea) return;
     textarea.style.height = "auto";
-    textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
-  }, [value]);
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 110)}px`;
+    // Only show a scrollbar once the text is taller than the 110px maximum.
+    textarea.style.overflowY = textarea.scrollHeight > 110 ? "auto" : "hidden";
+  }, [value, textareaRef]);
 
   function submit(event) {
     event.preventDefault();
-    onSend();
+    onSend(value);
   }
 
   function handleKeyDown(event) {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      onSend();
+      onSend(value);
     }
   }
 
-  return <form className="chat-composer" onSubmit={submit}>
-    <label className="sr-only" htmlFor="chat-question">Ask e& Egypt Assistant a question</label>
-    <textarea ref={textareaRef} id="chat-question" value={value} onChange={(event) => onChange(event.target.value)} onKeyDown={handleKeyDown} placeholder="Ask about e& plans and services." rows="1" aria-describedby="composer-help composer-safety" disabled={isLoading} />
-    <IconButton className="chat-composer__send" label="Send message" disabled={!value.trim() || isLoading}>↑</IconButton>
-    <span className="chat-composer__hint" id="composer-help">Enter to send · Shift+Enter for a new line</span>
+  return <form className="chat-foot" onSubmit={submit}>
+    <textarea ref={textareaRef} rows="1" dir="auto" value={value} placeholder={placeholder} aria-label={messageLabel} onChange={(event) => onChange(event.target.value)} onKeyDown={handleKeyDown} />
+    <button className="send" type="submit" aria-label={sendLabel} disabled={!value.trim() || isLoading}><Icon name="send" width="20" height="20" stroke="#fff" strokeWidth="2.1" /></button>
   </form>;
 }

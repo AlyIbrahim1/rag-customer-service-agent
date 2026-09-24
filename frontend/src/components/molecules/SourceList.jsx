@@ -1,12 +1,17 @@
-export default function SourceList({ sources }) {
+import { sourcePdfTarget } from "../../content";
+
+// One-based citations open the matching page in the site's PDF dialog.
+export default function SourceList({ sources, label, pageLabel, onOpenPdf }) {
   if (!sources.length) return null;
-  return <section className="source-list" aria-label="Sources used">
-    <p>Sources used</p>
-    <ul>{sources.map((source) => {
+  return <div className="msg-sources" dir="ltr">
+    <small>{label}</small>
+    <ol>{sources.map((source) => {
+      const target = sourcePdfTarget(source);
       const page = Number(source.page);
-      const pageFragment = Number.isInteger(page) && page > 0 ? `#page=${page}` : "";
-      const label = `${source.title}${pageFragment ? ` — page ${page}` : ""}`;
-      return <li key={`${source.title}-${source.page ?? ""}`}><a href={`/api/sources/${encodeURIComponent(source.title)}${pageFragment}`} target="_blank" rel="noreferrer" aria-label={`Open ${label} in a new tab`}>{label}</a></li>;
-    })}</ul>
-  </section>;
+      const text = <>{source.title}{Number.isInteger(page) && page > 0 && ` — ${pageLabel} ${page}`}</>;
+      return <li key={`${source.title}-${source.page ?? ""}`}>
+        {target ? <button type="button" onClick={() => onOpenPdf(target.index, target.page)}>{text}</button> : <span>{text}</span>}
+      </li>;
+    })}</ol>
+  </div>;
 }

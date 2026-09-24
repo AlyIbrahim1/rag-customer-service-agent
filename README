@@ -1,15 +1,19 @@
 ## e& Egypt RAG Assistant
 
+![Preview of the e& Egypt RAG Assistant website](.github/assets/preview.png)
+
+This project was made throughout my internship at e& Egypt, it is a customer service RAG agent that lives in 
 This project has two local ways to use the e& Egypt product knowledge base:
 
-- the existing React chat interface, which uses the Python HTTP API; and
+- a React website that recreates the e& Egypt homepage in a dark theme, with a
+  chat bubble in the bottom-right corner that uses the Python HTTP API; and
 - an MCP server, which lets an MCP-capable AI agent search the same indexed PDF
   knowledge base.
 
 All backend implementation lives in the `backend/` Python package. Use the
 package entrypoints shown below for imports, development, and deployment.
 
-### Run the existing web chat locally
+### Run the website locally
 
 1. Create and activate the Python virtual environment, then install the backend
    packages with `pip install -r requirements.txt`.
@@ -21,7 +25,27 @@ package entrypoints shown below for imports, development, and deployment.
 4. In a second terminal, run `cd frontend`, `npm install`, then `npm run dev`.
 
 The Vite development server proxies `/api` requests to the Python API. Open the
-URL it prints (normally `http://localhost:5173`) to use the assistant.
+URL it prints (normally `http://localhost:5173`), then click the red chat bubble
+in the bottom-right corner to talk to the assistant. Add `#ar` to the URL to open
+the site in Arabic.
+
+### What the website includes
+
+- **Homepage:** header with menus, hero slider, plans, services, e-Shop,
+  entertainment, and footer, matching the actual e& design.
+- **English / Arabic switch:** the globe button in the top bar. Arabic flips the
+  whole page right-to-left, including the chat bubble.
+- **Chat bubble:** answers come from the e& product guides, with numbered source
+  links under each grounded answer. If the guides don't cover a question, the
+  assistant says so instead of guessing. The conversation is not saved; a page
+  refresh or the reset button starts over.
+- **Plan PDF viewer:** click a plan card (or a plan name in the menu or footer)
+  to read its PDF, download it, or ask the assistant about it.
+
+The knowledge base is in English, so Arabic questions may get weaker answers.
+
+To change website text in either language, edit `frontend/src/content.js`.
+Plan PDFs are in `assets/pdfs/en/` and `assets/pdfs/ar/`.
 
 ## Use the knowledge base from an MCP-capable agent
 
@@ -71,7 +95,7 @@ repository-root working directory.
 Do not run the server in a normal terminal for interactive use: it communicates
 with the agent over standard input/output (stdio). That also means a browser or
 the React frontend cannot connect to it directly. Keep using
-`uvicorn backend.api:app --reload` and the web-chat steps above until a separate
+`uvicorn backend.api:app --reload` and the website steps above until a separate
 server-side, agent-hosted HTTP backend is deliberately added.
 
 ### 3. Give the agent these tool instructions

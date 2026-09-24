@@ -23,13 +23,13 @@ Beginner-focused e& Egypt RAG assistant with a Python backend and React frontend
 - Ground e& product claims in retrieved knowledge-base content and show readable, one-based source citations.
 - Handle missing, empty, or low-confidence retrieval explicitly; never let the model fill knowledge gaps.
 - Validate trust boundaries and never expose distances, filesystem paths, stack traces, keys, or internal prompts.
-- Customer-facing copy is English-only for actual e& Egypt customers; tone is warm, reassuring, and competent.
+- Customer-facing copy is English and Arabic (EN/AR switch) for actual e& Egypt customers; tone is warm, reassuring, and competent.
 - Never imply access to customer accounts or ask for passwords or verification codes.
 
 ## Read only when relevant
 
 - `ARCHITECTURE.md` — read only for code changes, debugging, setup, integration, API contracts, data flow, or repository structure.
-- `frontend-design-plan.md` and `.impeccable.md` — read fully before frontend design or implementation; follow the planned ChatGPT-inspired e& design and AMOTP structure.
+- `eand-dark-assistant/` — the reference design; the React frontend must match it and keep the AMOTP structure.
 - `project-instructions.md` — read only when work concerns the original internship scope, deliverables, or evaluation criteria.
 
 The current React + Starlette implementation overrides the original brief's suggested Streamlit scaffold. Planned behavior must not be described as already implemented.

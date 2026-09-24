@@ -9,8 +9,9 @@ Technical reference for the current repository. Read this only when a task needs
 - The frontend follows the AMOTP hierarchy under `frontend/src/components/`,
   `frontend/src/templates/`, and `frontend/src/pages/`.
 - The API returns `answer`, `outcome`, and structured `{title, page}` citations.
-- The frontend implements ChatGPT-inspired e& shell behavior, retry, undo,
-  grouped history, drawer accessibility, and near-bottom-aware scrolling.
+- The frontend is a dark e& Egypt homepage replica (English/Arabic RTL switch)
+  with a bottom-right chat bubble and a plan PDF viewer, ported from the static
+  design in `eand-dark-assistant/`.
 - Streamlit is not active and there is no `app.py`.
 
 Prefer `python -m backend.ingest`,
@@ -32,7 +33,7 @@ Prefer `python -m backend.ingest`,
 
 - React 19 and Vite 7
 - Vanilla CSS
-- Native `fetch`, React state, and browser `localStorage`
+- Native `fetch` and React state; pdf.js 3.11 loaded as a global script for the PDF viewer
 - No router, UI kit, or state-management library
 
 ## Important files
@@ -58,16 +59,20 @@ backend/
 └── checks/         runnable backend checks
 ```
 - `knowledge-base/` — DataLine, Emerald, Hekaya Internet, Hekaya Mixat, and Prepaid Systems PDFs.
-- `assets/` — e& logos exposed through Vite's configured public directory.
-- `frontend/src/App.jsx` — thin entry that renders `ChatPage`.
-- `frontend/src/pages/ChatPage.jsx` — conversation state, API requests,
-  persistence, retry, deletion/undo, theme, and scroll decisions.
-- `frontend/src/templates/ChatTemplate.jsx` — responsive shell layout.
-- `frontend/src/components/` — AMOTP atoms, molecules, and organisms.
-- `frontend/src/styles.css` — shared tokens and responsive light/dark styling.
+- `assets/` — Vite's public directory: e& logos plus the design's images, icons,
+  fonts, plan PDFs (`pdfs/en|ar/`), and `vendor/pdfjs/`.
+- `frontend/src/App.jsx` — thin entry that renders `HomePage`.
+- `frontend/src/pages/HomePage.jsx` — language (`#en`/`#ar`, `<html dir>`),
+  PDF viewer state, and "Ask the assistant" hand-off to the chat.
+- `frontend/src/templates/HomeTemplate.jsx` — homepage skeleton.
+- `frontend/src/components/` — AMOTP atoms, molecules, and organisms;
+  `organisms/ChatWidget.jsx` owns chat state and `/api/chat` requests,
+  `organisms/PdfViewer.jsx` renders plan PDFs.
+- `frontend/src/content.js` — all English and Arabic copy.
+- `frontend/src/styles.css` — the design's CSS (dark only, RTL via logical properties).
 - `frontend/vite.config.js` — Vite React plugin and `/api` proxy to `127.0.0.1:8000`.
-- `frontend-design-plan.md` — approved redesign and target AMOTP architecture.
-- `.impeccable.md` — frontend audience, brand, interaction, and accessibility context.
+- `eand-dark-assistant/` — static reference design the React frontend reproduces.
+- `.impeccable.md` — frontend audience and accessibility context (predates the current design).
 - `mcp-migration-plan.md` — planning only; not implemented behavior.
 - `README` — concise local setup guide; the filename has no extension.
 
@@ -95,7 +100,7 @@ React
                                                    product question
        -> generate_direct -> respond         greeting/history request
   -> JSON response
-  -> React state and localStorage
+  -> React state (chat is not persisted)
 ```
 
 - `understand` routes the request and resolves conversational references into a standalone retrieval question.
@@ -159,9 +164,10 @@ The local embedding model may download on first use.
 ## Persistence
 
 - Chroma data is stored in ignored `chroma_db/`.
-- The frontend stores conversations under `etisalat-conversations`.
-- The active conversation uses `etisalat-active-conversation`.
-- Theme choice uses `etisalat-theme`.
+- The chat bubble keeps one in-memory conversation; a refresh or the reset
+  button starts over.
+- The Arabic UI sends Arabic questions to the same English knowledge base, so
+  Arabic retrieval quality is not yet tuned.
 
 ## Remaining release questions
 
@@ -170,4 +176,4 @@ The local embedding model may download on first use.
 - May customers open cited PDFs, or should citations remain informational?
 - Which official e& digital typeface may be licensed and hosted?
 
-See `frontend-design-plan.md` for the original scope and acceptance criteria.
+See `project-instructions.md` for the original scope and acceptance criteria.

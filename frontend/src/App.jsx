@@ -1,3 +1,3 @@
-import ChatPage from "./pages/ChatPage";
+import HomePage from "./pages/HomePage";
 
-export default function App() { return <ChatPage />; }
+export default function App() { return <HomePage />; }
