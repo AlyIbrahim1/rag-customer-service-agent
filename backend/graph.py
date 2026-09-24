@@ -9,7 +9,7 @@ from .config import CHAT_MODEL, GENERATION_BASE_URL, GOOGLE_API_KEY
 from .mcp_client import search_knowledge_base_via_mcp
 
 
-llm = OpenAI(api_key=GOOGLE_API_KEY, base_url=GENERATION_BASE_URL)
+llm = OpenAI(api_key=GOOGLE_API_KEY, base_url=GENERATION_BASE_URL, max_retries=4, timeout=20.0)
 
 SYSTEM_PROMPT = (
     "You are the e& Egypt Assistant, a friendly and professional customer support "

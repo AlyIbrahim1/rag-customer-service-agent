@@ -1,6 +1,7 @@
 """Shared, read-only search for the indexed e& Egypt knowledge base."""
 
 from functools import lru_cache
+from math import isfinite
 
 import chromadb
 from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
@@ -37,7 +38,10 @@ def _get_collection():
 
     try:
         client = chromadb.PersistentClient(path=str(CHROMA_DIR))
-        embedding_fn = SentenceTransformerEmbeddingFunction(model_name=EMBEDDING_MODEL)
+        # Indexing downloads the model; customer searches use the cached copy.
+        embedding_fn = SentenceTransformerEmbeddingFunction(
+            model_name=EMBEDDING_MODEL, local_files_only=True
+        )
         return client.get_collection(
             name=COLLECTION_NAME,
             embedding_function=embedding_fn,
@@ -92,19 +96,14 @@ def search_knowledge_base(question: str) -> dict:
     metadatas = _first_query_value(query.get("metadatas"))
     distances = _first_query_value(query.get("distances"))
 
-    if not documents or not distances:
-        return _no_match()
-
-    try:
-        best_distance = float(distances[0])
-    except (IndexError, TypeError, ValueError):
-        return _no_match()
-    if best_distance > DISTANCE_THRESHOLD:
-        return _no_match()
-
     results = []
-    seen_citations = set()
-    for text, metadata in zip(documents, metadatas):
+    for text, metadata, distance in zip(documents, metadatas, distances):
+        try:
+            distance = float(distance)
+        except (TypeError, ValueError):
+            continue
+        if not isfinite(distance) or distance > DISTANCE_THRESHOLD:
+            continue
         if not isinstance(text, str) or not text.strip() or not isinstance(metadata, dict):
             continue
 
@@ -120,10 +119,8 @@ def search_knowledge_base(question: str) -> dict:
             continue
 
         title = _title(source)
-        citation = (title, page)
-        if not title or citation in seen_citations:
+        if not title:
             continue
-        seen_citations.add(citation)
         results.append({"text": text, "source": {"title": title, "page": page}})
 
     return {"outcome": "grounded", "results": results} if results else _no_match()
